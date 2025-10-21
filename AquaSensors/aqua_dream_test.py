@@ -6,22 +6,34 @@ CLIENT_ID = "pi-aqua-dreams"
 TOPIC = f"devices/{CLIENT_ID}/telemetry"
 
 CERT_DIR = "/home/sivachandan/aws_iot"
-CA   = os.path.join(CERT_DIR, "AmazonRootCA1.pem")
-CERT = os.path.join(CERT_DIR, "5ddb201d4ac939508f608bc9d497e59eeb18c5741f08945a1dbc6ed8c50afc87-certificate.pem.crt")
-KEY  = os.path.join(CERT_DIR, "5ddb201d4ac939508f608bc9d497e59eeb18c5741f08945a1dbc6ed8c50afc87-private.pem.key")
+CA = os.path.join(CERT_DIR, "AmazonRootCA1.pem")
+CERT = os.path.join(
+    CERT_DIR,
+    "5ddb201d4ac939508f608bc9d497e59eeb18c5741f08945a1dbc6ed8c50afc87-certificate.pem.crt",
+)
+KEY = os.path.join(
+    CERT_DIR,
+    "5ddb201d4ac939508f608bc9d497e59eeb18c5741f08945a1dbc6ed8c50afc87-private.pem.key",
+)
 
 # Preflight checks
 for p in (CA, CERT, KEY):
     if not os.path.isfile(p):
         raise FileNotFoundError(f"Missing file: {p}")
 
-client = mqtt.Client(client_id=CLIENT_ID, callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
+client = mqtt.Client(
+    client_id=CLIENT_ID, callback_api_version=mqtt.CallbackAPIVersion.VERSION2
+)
+
 
 def on_connect(client, userdata, flags, reason_code, properties):
     print("✅ Connected" if reason_code == 0 else f"❌ Connect failed: {reason_code}")
 
+
 client.on_connect = on_connect
-client.tls_set(ca_certs=CA, certfile=CERT, keyfile=KEY, tls_version=ssl.PROTOCOL_TLSv1_2)
+client.tls_set(
+    ca_certs=CA, certfile=CERT, keyfile=KEY, tls_version=ssl.PROTOCOL_TLSv1_2
+)
 
 print(f"Connecting to {ENDPOINT} ...")
 client.connect(ENDPOINT, port=8883, keepalive=60)
