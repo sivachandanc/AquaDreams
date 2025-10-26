@@ -1,7 +1,3 @@
-provider "aws" {
-  region = "us-east-1"
-}
-
 resource "aws_dynamodb_table" "sensor_data" {
   name           = "sensor-data"
   billing_mode   = "PAY_PER_REQUEST"
