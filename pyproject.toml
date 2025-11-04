@@ -1,0 +1,16 @@
+[project]
+name = "aquadreams"
+version = "0.1.0"
+description = "IoT project for Aqua Dreams"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "awscrt",
+    "awsiotsdk",
+    "paho-mqtt",
+    "requests",
+]
+
+
+[project.scripts]
+hello = "AquaSensors.main:main"
