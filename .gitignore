@@ -3,3 +3,4 @@ aquadreams.egg-info/
 dist/
 __pycache__/
 build/
+.DS_Store
