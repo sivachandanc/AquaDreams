@@ -1,5 +1,5 @@
 import argparse
-from aqua_dream_temp_reader import TemperaturePublisher
+from .aqua_dream_temp_reader import TemperaturePublisher
 
 def main():
     parser = argparse.ArgumentParser(description="Aqua Dreams IoT project")

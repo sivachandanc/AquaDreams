@@ -1,12 +1,83 @@
-from awscrt import mqtt
-from awsiot import mqtt_connection_builder
-import os, glob, time, json
-from mqtt_client import mqtt_client
-from utils.get_pi_serial import get_pi_serial
+"""
+AquaDreams Temperature Reader Module
+
+This module provides functionality for reading temperature data from DS18B20 1-wire sensors
+on Raspberry Pi and publishing the readings to an MQTT broker for the AquaDreams aquarium
+monitoring system.
+
+The module interfaces with the Linux kernel's 1-wire subsystem (/sys/bus/w1/devices/)
+to read temperature data and formats it into structured JSON payloads with metadata
+including device identification, timestamps, and TTL for data retention.
+
+Classes:
+    TemperaturePublisher: Main class for reading sensor data and publishing via MQTT.
+
+Typical Usage:
+    Direct execution for continuous monitoring:
+        $ python -m AquaSensors.aqua_dream_temp_reader
+    
+    Programmatic usage:
+        from AquaSensors.aqua_dream_temp_reader import TemperaturePublisher
+        
+        publisher = TemperaturePublisher(topic="my-topic", ttl_days=30)
+        publisher.publish_once()  # Single reading
+        # or
+        publisher.run(interval_seconds=10)  # Continuous monitoring
+
+Hardware Requirements:
+    - Raspberry Pi with 1-wire interface enabled
+    - DS18B20 temperature sensor connected to GPIO (typically GPIO4)
+    - Sensor device should appear as /sys/bus/w1/devices/28-*
+
+Dependencies:
+    - awscrt: AWS CRT library for MQTT communication
+    - mqtt_client: Local module for MQTT connection management
+    - utils.get_pi_serial: Utility for retrieving Raspberry Pi serial number
+"""
+
 import datetime as dt
+import glob
+import time
+import json
+from awscrt import mqtt
+from .mqtt_client import mqtt_client
+from .utils.get_pi_serial import get_pi_serial
 
 
 class TemperaturePublisher:
+    """
+    A publisher for reading and transmitting temperature data from DS18B20 sensor via MQTT.
+
+    This class interfaces with a DS18B20 1-wire temperature sensor connected to a Raspberry Pi
+    and publishes the readings to an MQTT broker. Each reading includes metadata such as device ID,
+    timestamp, and configurable TTL for data retention.
+
+    Attributes:
+        base_dir (str): Base directory for 1-wire devices (/sys/bus/w1/devices/).
+        device_folder (str): Path to the detected DS18B20 sensor device.
+        device_file (str): Full path to the sensor's w1_slave file for reading temperature.
+        mqtt_connection: MQTT connection instance for publishing data.
+        topic (str): MQTT topic where temperature data is published.
+        cpu_id (str): Unique CPU serial number of the Raspberry Pi.
+        pk (str): Primary key for the data record (format: {cpu_id}#temperature).
+        device_id (str): Identifier for the device (same as cpu_id).
+        metric_type (str): Type of metric being measured (always "temperature").
+        ttl_days (int): Number of days before the data record expires.
+
+    Args:
+        topic (str, optional): MQTT topic for publishing temperature data. 
+            Defaults to "pi-aqua-dreams/temperature".
+        ttl_days (int, optional): Time-to-live in days for published data records.
+            Defaults to 90.
+
+    Raises:
+        RuntimeError: If the CPU ID cannot be retrieved from the Raspberry Pi.
+        IndexError: If no DS18B20 sensor (28-* device) is found in /sys/bus/w1/devices/.
+
+    Example:
+        >>> publisher = TemperaturePublisher(topic="my-topic", ttl_days=30)
+        >>> publisher.run(interval_seconds=10)  # Publish every 10 seconds
+    """
     def __init__(self, topic="pi-aqua-dreams/temperature", ttl_days=90):
         self.base_dir = "/sys/bus/w1/devices/"
         self.device_folder = glob.glob(self.base_dir + "28-*")[0]
@@ -29,13 +100,13 @@ class TemperaturePublisher:
 
     def read_temp(self):
         """Reads raw temperature from DS18B20 1-wire sensor."""
-        with open(self.device_file) as f:
+        with open(self.device_file, encoding='utf-8') as f:
             lines = f.readlines()
 
         # Wait until CRC = YES
         while lines[0].strip()[-3:] != "YES":
             time.sleep(0.2)
-            with open(self.device_file) as f:
+            with open(self.device_file, encoding='utf-8') as f:
                 lines = f.readlines()
 
         equals_pos = lines[1].find("t=")
@@ -93,5 +164,4 @@ class TemperaturePublisher:
 
 # Optional: Run directly if executed as script
 if __name__ == "__main__":
-    pub = TemperaturePublisher()
-    pub.run()
+    pass
