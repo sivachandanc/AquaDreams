@@ -1,4 +1,5 @@
 import argparse
+from aqua_dream_temp_reader import TemperaturePublisher
 
 def main():
     parser = argparse.ArgumentParser(description="Aqua Dreams IoT project")
@@ -6,9 +7,11 @@ def main():
     args = parser.parse_args()
     if args.temp_sensor == "true":
         print("Reading temperature sensor")
+        publisher = TemperaturePublisher()
+        publisher.run()
     else:
         print("Running main mode")
 
 
 if __name__ == "__main__":
-    pass
+    main()

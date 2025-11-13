@@ -3,67 +3,95 @@ from awsiot import mqtt_connection_builder
 import os, glob, time, json
 from mqtt_client import mqtt_client
 from utils.get_pi_serial import get_pi_serial
-import time, datetime as dt
-
-"""
-{ "pk": "tank-01#temperature",
-"ts": 1739999123456,
-"value": 24.6,
-"unit": "C",
-"device_id": "tank-01",
-"metric_type": "temperature",
-"date_ymd": "2025-10-20",
-"quality": "ok",
-"ttl": 1766534400 }
-"""
+import datetime as dt
 
 
-base_dir = "/sys/bus/w1/devices/"
-device_folder = glob.glob(base_dir + "28-*")[0]
-device_file = device_folder + "/w1_slave"
+class TemperaturePublisher:
+    def __init__(self, topic="pi-aqua-dreams/temperature", ttl_days=90):
+        self.base_dir = "/sys/bus/w1/devices/"
+        self.device_folder = glob.glob(self.base_dir + "28-*")[0]
+        self.device_file = self.device_folder + "/w1_slave"
+
+        # MQTT Connection
+        self.mqtt_connection = mqtt_client()
+        self.topic = topic
+
+        # Device metadata
+        self.cpu_id = get_pi_serial()
+        if self.cpu_id is None:
+            raise RuntimeError("❌ Error getting CPU ID")
+
+        self.pk = f"{self.cpu_id}#temperature"
+        self.device_id = self.cpu_id
+        self.metric_type = "temperature"
+        self.ttl_days = ttl_days
 
 
-def read_temp():
-
-    with open(device_file) as f:
-        lines = f.readlines()
-    while lines[0].strip()[-3:] != "YES":
-        time.sleep(0.2)
-        with open(device_file) as f:
+    def read_temp(self):
+        """Reads raw temperature from DS18B20 1-wire sensor."""
+        with open(self.device_file) as f:
             lines = f.readlines()
-    equals_pos = lines[1].find("t=")
-    if equals_pos != -1:
-        return float(lines[1][equals_pos + 2 :]) / 1000.0
+
+        # Wait until CRC = YES
+        while lines[0].strip()[-3:] != "YES":
+            time.sleep(0.2)
+            with open(self.device_file) as f:
+                lines = f.readlines()
+
+        equals_pos = lines[1].find("t=")
+        if equals_pos != -1:
+            return float(lines[1][equals_pos + 2:]) / 1000.0
+
+        return None
 
 
-mqtt_connection = mqtt_client()
-topic = "pi-aqua-dreams/temperature"
-cpu_id = get_pi_serial()
-if cpu_id is None:
-    print("❌ Error getting CPU ID")
-    exit(1)
+    def build_payload(self, value: float) -> str:
+        """Construct JSON payload."""
+        date_ymd = dt.datetime.utcnow().strftime("%Y-%m-%d")
+        ttl_ts = int((dt.datetime.utcnow() + dt.timedelta(days=self.ttl_days)).timestamp())
 
-pk = f"{cpu_id}#temperature"
-device_id = cpu_id
-metric_type = "temperature"
-
-
-while True:
-    date_ymd = dt.datetime.utcnow().strftime("%Y-%m-%d")
-    temp_c = read_temp()
-    payload = json.dumps(
-        {
-            "pk": pk,
+        payload = {
+            "pk": self.pk,
             "ts": int(time.time() * 1000),
-            "value": temp_c,
+            "value": value,
             "unit": "C",
-            "device_id": device_id,
-            "metric_type": metric_type,
+            "device_id": self.device_id,
+            "metric_type": self.metric_type,
             "date_ymd": date_ymd,
             "quality": "ok",
-            "ttl": int((dt.datetime.utcnow() + dt.timedelta(days=90)).timestamp())
+            "ttl": ttl_ts,
         }
-    )
-    mqtt_connection.publish(topic=topic, payload=payload, qos=mqtt.QoS.AT_LEAST_ONCE)
-    print("Published:", payload)
-    time.sleep(5)
+
+        return json.dumps(payload)
+
+
+    def publish_once(self):
+        """Reads temperature, builds payload, and publishes one message."""
+        temp_c = self.read_temp()
+        payload = self.build_payload(temp_c)
+
+        self.mqtt_connection.publish(
+            topic=self.topic,
+            payload=payload,
+            qos=mqtt.QoS.AT_LEAST_ONCE
+        )
+
+        print("Published:", payload)
+        return temp_c
+
+
+    def run(self, interval_seconds=5):
+        """Infinite loop publishing temperature."""
+        print("📡 Temperature publisher started... press Ctrl+C to stop.")
+        try:
+            while True:
+                self.publish_once()
+                time.sleep(interval_seconds)
+        except KeyboardInterrupt:
+            print("🛑 Stopped by user.")
+
+
+# Optional: Run directly if executed as script
+if __name__ == "__main__":
+    pub = TemperaturePublisher()
+    pub.run()
