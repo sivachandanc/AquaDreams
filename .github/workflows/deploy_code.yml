@@ -21,6 +21,13 @@ jobs:
           echo "Build completed successfully"
           ls -lh dist/
       
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+      
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
@@ -29,19 +36,16 @@ jobs:
           
           # Extract IP from user@ip format for ssh-keyscan
           SERVER_IP=$(echo "${{ secrets.RASBERRY_PI_USER_ID_IP }}" | cut -d'@' -f2)
-          echo "Extracted server IP: $SERVER_IP"
+          echo "Scanning SSH keys from Tailscale IP: $SERVER_IP"
           
-          # Add server to known_hosts with timeout
-          ssh-keyscan -H -T 10 $SERVER_IP >> ~/.ssh/known_hosts 2>&1 || {
-            echo "Warning: ssh-keyscan failed, trying without host hashing..."
-            ssh-keyscan -T 10 $SERVER_IP >> ~/.ssh/known_hosts 2>&1
+          # Now that we're on Tailscale network, ssh-keyscan should work
+          ssh-keyscan -H $SERVER_IP >> ~/.ssh/known_hosts 2>&1 || {
+            echo "ssh-keyscan failed, disabling strict host key checking..."
+            echo "Host $SERVER_IP" > ~/.ssh/config
+            echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+            echo "  UserKnownHostsFile=/dev/null" >> ~/.ssh/config
+            chmod 600 ~/.ssh/config
           }
-          
-          # Alternatively, disable strict host key checking (less secure but more reliable)
-          echo "Host *" > ~/.ssh/config
-          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
-          echo "  UserKnownHostsFile=/dev/null" >> ~/.ssh/config
-          chmod 600 ~/.ssh/config
       
       - name: Deploy to Raspberry Pi
         run: |
