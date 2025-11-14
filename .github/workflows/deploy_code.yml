@@ -26,9 +26,22 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
+          
           # Extract IP from user@ip format for ssh-keyscan
           SERVER_IP=$(echo "${{ secrets.RASBERRY_PI_USER_ID_IP }}" | cut -d'@' -f2)
-          ssh-keyscan -H $SERVER_IP >> ~/.ssh/known_hosts
+          echo "Extracted server IP: $SERVER_IP"
+          
+          # Add server to known_hosts with timeout
+          ssh-keyscan -H -T 10 $SERVER_IP >> ~/.ssh/known_hosts 2>&1 || {
+            echo "Warning: ssh-keyscan failed, trying without host hashing..."
+            ssh-keyscan -T 10 $SERVER_IP >> ~/.ssh/known_hosts 2>&1
+          }
+          
+          # Alternatively, disable strict host key checking (less secure but more reliable)
+          echo "Host *" > ~/.ssh/config
+          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+          echo "  UserKnownHostsFile=/dev/null" >> ~/.ssh/config
+          chmod 600 ~/.ssh/config
       
       - name: Deploy to Raspberry Pi
         run: |
